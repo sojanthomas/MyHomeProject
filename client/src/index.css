@@ -30,6 +30,29 @@ body {
   min-height: 100vh;
 }
 
+/* Page background image (replace /home-bg.svg with your photo at client/public/home-bg.svg) */
+body {
+  background-image: url('/home-bg.svg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+/* Dark overlay to keep content readable */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(rgba(8,10,14,0.55), rgba(8,10,14,0.55));
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
