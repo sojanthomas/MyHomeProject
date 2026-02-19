@@ -1,0 +1,10 @@
+CREATE DATABASE IF NOT EXISTS home_assets;
+USE home_assets;
+
+CREATE TABLE IF NOT EXISTS assets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  value DECIMAL(12,2) NOT NULL,
+  location VARCHAR(255),
+  purchase_date DATE
+);

@@ -1,0 +1,8 @@
+node_modules
+build
+dist
+.env
+.env.*
+db_data
+client/node_modules
+server/node_modules
