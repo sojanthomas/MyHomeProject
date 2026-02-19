@@ -43,11 +43,11 @@
 
 /* Asset manager styles */
 .asset-manager {
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  background: transparent;
   border: 1px solid rgba(255,255,255,0.04);
   padding: 1.25rem;
   border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  box-shadow: none;
   margin-top: 1rem;
 }
 .asset-header{
