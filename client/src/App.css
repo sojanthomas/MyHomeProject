@@ -40,3 +40,59 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Asset manager styles */
+.asset-manager {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 1.25rem;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  margin-top: 1rem;
+}
+.asset-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:0.75rem;
+}
+.assets-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:0.95rem;
+}
+.assets-table th{
+  text-align:left;
+  padding:0.75rem 0.5rem;
+  color:rgba(255,255,255,0.85);
+  font-weight:600;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.assets-table td{
+  padding:0.75rem 0.5rem;
+  border-bottom:1px dashed rgba(255,255,255,0.03);
+}
+.assets-table tr:nth-child(even){
+  background: rgba(255,255,255,0.01);
+}
+.asset-name{font-weight:600}
+.asset-value{color:#a9f0c1}
+.asset-date{color:#bfc7d6}
+.btn-link{
+  background:transparent;
+  border:0;
+  color:#6495ff;
+  margin-right:0.5rem;
+}
+.btn-danger{
+  background:#ff5959;
+  color:white;
+  border:0;
+  padding:0.45rem 0.7rem;
+  border-radius:6px;
+}
+.asset-form{margin-bottom:1rem}
+.asset-form .form-row{display:flex;gap:0.5rem;margin-bottom:0.5rem}
+.asset-form input{flex:1;padding:0.5rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+.form-actions{display:flex;gap:0.5rem}
+.empty-row td{color:rgba(255,255,255,0.6);padding:1rem;text-align:center}

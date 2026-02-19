@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AssetForm from './AssetForm';
+import '../App.css';
 
 interface Asset {
   id?: number;
@@ -12,6 +13,7 @@ interface Asset {
 export default function AssetManager() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [editing, setEditing] = useState<Asset | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const fetchAssets = async () => {
     const res = await fetch('/api/assets');
@@ -47,10 +49,19 @@ export default function AssetManager() {
   };
 
   return (
-    <div>
-      <h2>Home Assets</h2>
-      <AssetForm asset={editing} onSave={handleSave} onCancel={() => setEditing(null)} />
-      <table>
+    <div className="asset-manager">
+      <div className="asset-header">
+        <h2>Home Assets</h2>
+        <div>
+          <button onClick={() => { setEditing(null); setShowForm(s => !s); }}>
+            {showForm ? 'Close' : 'Add Asset'}
+          </button>
+        </div>
+      </div>
+      {showForm && (
+        <AssetForm asset={editing} onSave={handleSave} onCancel={() => { setEditing(null); setShowForm(false); }} />
+      )}
+      <table className="assets-table">
         <thead>
           <tr>
             <th>Name</th>
@@ -61,15 +72,18 @@ export default function AssetManager() {
           </tr>
         </thead>
         <tbody>
+          {assets.length === 0 && (
+            <tr className="empty-row"><td colSpan={5}>No assets yet. Click "Add Asset" to create one.</td></tr>
+          )}
           {assets.map((asset) => (
             <tr key={asset.id}>
-              <td>{asset.name}</td>
-              <td>{asset.value}</td>
-              <td>{asset.location}</td>
-              <td>{asset.purchase_date}</td>
+              <td className="asset-name">{asset.name}</td>
+              <td className="asset-value">{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(asset.value))}</td>
+              <td className="asset-location">{asset.location}</td>
+              <td className="asset-date">{asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : ''}</td>
               <td>
-                <button onClick={() => handleEdit(asset)}>Edit</button>
-                <button onClick={() => handleDelete(asset.id!)}>Delete</button>
+                <button className="btn-link" onClick={() => { handleEdit(asset); setShowForm(true); }}>Edit</button>
+                <button className="btn-danger" onClick={() => handleDelete(asset.id!)}>Delete</button>
               </td>
             </tr>
           ))}
