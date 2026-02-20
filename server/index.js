@@ -47,6 +47,18 @@ await db.execute(
   )`
 );
 
+// Ensure sticky_notes table exists
+await db.execute(
+  `CREATE TABLE IF NOT EXISTS sticky_notes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    content TEXT,
+    severity VARCHAR(32) DEFAULT 'low',
+    position VARCHAR(16) DEFAULT 'left',
+    color VARCHAR(64),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`
+);
+
 // Create asset
 app.post('/api/assets', async (req, res) => {
   const { name, value, location, purchase_date } = req.body;
@@ -159,6 +171,53 @@ app.delete('/api/activities/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await db.execute('DELETE FROM activities WHERE id=?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sticky notes CRUD
+app.post('/api/stickies', async (req, res) => {
+  const { content, severity, position, color } = req.body;
+  try {
+    const [result] = await db.execute(
+      'INSERT INTO sticky_notes (content, severity, position, color) VALUES (?, ?, ?, ?)',
+      [content, severity ?? 'low', position ?? 'left', color ?? null]
+    );
+    res.status(201).json({ id: result.insertId, content, severity, position, color });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/stickies', async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT * FROM sticky_notes ORDER BY id DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/stickies/:id', async (req, res) => {
+  const { id } = req.params;
+  const { content, severity, position, color } = req.body;
+  try {
+    await db.execute(
+      'UPDATE sticky_notes SET content=?, severity=?, position=?, color=? WHERE id=?',
+      [content, severity ?? 'low', position ?? 'left', color ?? null, id]
+    );
+    res.json({ id, content, severity, position, color });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/stickies/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute('DELETE FROM sticky_notes WHERE id=?', [id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

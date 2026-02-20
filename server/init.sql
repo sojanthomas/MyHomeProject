@@ -8,3 +8,13 @@ CREATE TABLE IF NOT EXISTS assets (
   location VARCHAR(255),
   purchase_date DATE
 );
+
+-- Sticky notes table
+CREATE TABLE IF NOT EXISTS sticky_notes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  content TEXT,
+  severity VARCHAR(32) DEFAULT 'low',
+  position VARCHAR(16) DEFAULT 'left',
+  color VARCHAR(64),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

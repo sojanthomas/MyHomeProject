@@ -131,3 +131,18 @@
   .main-grid{grid-template-columns:1fr}
   .right-column > .asset-manager{position:static}
 }
+
+/* Sticky notes */
+.sticky-container{position:fixed;z-index:1200;display:flex;flex-direction:column;gap:0.5rem;max-width:300px}
+.sticky-left{left:1rem;top:5rem}
+.sticky-right{right:1rem;top:1rem}
+.sticky-note{min-width:180px;max-width:280px;padding:0.6rem;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);word-wrap:break-word}
+.sticky-note textarea{width:100%;min-height:60px;border:0;background:transparent;resize:vertical}
+.note-footer{display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem}
+.note-actions{display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem}
+.sticky-add-form{position:fixed;left:1rem;top:0.6rem;transform:none;z-index:1300;background:transparent}
+.sticky-add-form form{display:flex;gap:0.5rem;align-items:center}
+.sticky-add-form textarea{width:220px;height:34px;padding:0.4rem;border-radius:6px;border:1px solid rgba(0,0,0,0.08)}
+.sticky-add-form .sticky-controls{display:flex;gap:0.4rem;align-items:center}
+.sticky-add-form button{padding:0.35rem 0.6rem;border-radius:6px;border:0;background:#2b6ef6;color:#fff}
+
