@@ -47,6 +47,20 @@ await db.execute(
   )`
 );
 
+// Ensure stocks table exists
+await db.execute(
+  `CREATE TABLE IF NOT EXISTS stocks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(32) NOT NULL,
+    name VARCHAR(255),
+    qty DECIMAL(15,4) DEFAULT 0,
+    current_price DECIMAL(15,4) DEFAULT 0,
+    financial_institution VARCHAR(255),
+    cost DECIMAL(15,2) DEFAULT 0,
+    balance DECIMAL(15,2) DEFAULT 0
+  )`
+);
+
 // Ensure sticky_notes table exists
 await db.execute(
   `CREATE TABLE IF NOT EXISTS sticky_notes (
@@ -175,6 +189,45 @@ app.delete('/api/activities/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Stocks CRUD
+app.get('/api/stocks', async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT * FROM stocks ORDER BY id DESC');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/stocks', async (req, res) => {
+  const { symbol, name, qty, current_price, financial_institution, cost, balance } = req.body;
+  try {
+    const [result] = await db.execute(
+      'INSERT INTO stocks (symbol, name, qty, current_price, financial_institution, cost, balance) VALUES (?,?,?,?,?,?,?)',
+      [symbol, name, qty ?? 0, current_price ?? 0, financial_institution, cost ?? 0, balance ?? 0]
+    );
+    res.status(201).json({ id: result.insertId, symbol, name, qty, current_price, financial_institution, cost, balance });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/stocks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { symbol, name, qty, current_price, financial_institution, cost, balance } = req.body;
+  try {
+    await db.execute(
+      'UPDATE stocks SET symbol=?,name=?,qty=?,current_price=?,financial_institution=?,cost=?,balance=? WHERE id=?',
+      [symbol, name, qty ?? 0, current_price ?? 0, financial_institution, cost ?? 0, balance ?? 0, id]
+    );
+    res.json({ id, symbol, name, qty, current_price, financial_institution, cost, balance });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/stocks/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute('DELETE FROM stocks WHERE id=?', [id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Sticky notes CRUD

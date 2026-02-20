@@ -3,14 +3,16 @@ import './App.css';
 import AssetManager from './components/AssetManager';
 import AccountManager from './components/AccountManager';
 import ActivityManager from './components/ActivityManager';
+import StockManager from './components/StockManager';
 import StickyNotes from './components/StickyNotes';
 
-type View = 'assets' | 'accounts' | 'activities';
+type View = 'assets' | 'accounts' | 'activities' | 'stocks';
 
 const NAV_ITEMS: { id: View; label: string }[] = [
   { id: 'assets',     label: 'Home Assets' },
   { id: 'accounts',   label: 'Banking Accounts' },
   { id: 'activities', label: 'Activity Scheduler' },
+  { id: 'stocks',     label: 'Stocks Portfolio' },
 ];
 
 function App() {
@@ -27,6 +29,7 @@ function App() {
           {view === 'assets'     && <AssetManager />}
           {view === 'accounts'   && <AccountManager />}
           {view === 'activities' && <ActivityManager />}
+          {view === 'stocks'     && <StockManager />}
         </main>
 
         {/* Right-side navigation */}
