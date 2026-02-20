@@ -102,10 +102,11 @@
 .form-actions{display:flex;gap:0.5rem}
 .empty-row td{color:rgba(255,255,255,0.6);padding:1rem;text-align:center}
 
-/* App layout: content with room for fixed right nav */
+/* App layout: content with room for fixed right nav and top sticky bar */
 .app-layout{
   display:block;
   padding: 1.5rem 175px 1.5rem 1.5rem;
+  padding-top: 85px;
   min-height:100vh;
   box-sizing:border-box;
   width:100%;
@@ -190,17 +191,23 @@
 .sort-icon.active{opacity:1;color:#2b6ef6}
 .table-filter{padding:0.35rem 0.6rem;border-radius:6px;border:1px solid rgba(16,24,32,0.12);font-size:0.9rem;width:160px}
 
-/* Sticky notes */
-.sticky-container{position:fixed;z-index:1200;display:flex;flex-direction:column;gap:0.5rem;max-width:300px}
-.sticky-left{left:1rem;top:5rem}
-.sticky-right{right:1rem;top:1rem}
-.sticky-note{min-width:180px;max-width:280px;padding:0.6rem;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);word-wrap:break-word}
-.sticky-note textarea{width:100%;min-height:60px;border:0;background:transparent;resize:vertical}
-.note-footer{display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem}
-.note-actions{display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem}
-.sticky-add-form{position:fixed;left:1rem;top:0.6rem;transform:none;z-index:1300;background:transparent}
-.sticky-add-form form{display:flex;gap:0.5rem;align-items:center}
-.sticky-add-form textarea{width:220px;height:34px;padding:0.4rem;border-radius:6px;border:1px solid rgba(0,0,0,0.08)}
-.sticky-add-form .sticky-controls{display:flex;gap:0.4rem;align-items:center}
-.sticky-add-form button{padding:0.35rem 0.6rem;border-radius:6px;border:0;background:#2b6ef6;color:#fff}
+/* Sticky notes — horizontal bar pinned to top */
+.sticky-bar{position:fixed;top:0;left:0;right:165px;z-index:1100;display:flex;flex-direction:row;align-items:flex-start;gap:0.6rem;padding:0.4rem 0.75rem;background:rgba(245,245,245,0.97);backdrop-filter:blur(4px);border-bottom:1px solid #d4d4d4;box-shadow:0 2px 6px rgba(0,0,0,0.07);overflow-x:auto;min-height:68px}
+.sticky-add-form{display:flex;flex-direction:column;gap:0.3rem;flex-shrink:0}
+.sticky-add-form textarea{width:200px;height:32px;padding:0.3rem 0.5rem;border-radius:6px;border:1px solid #ccc;resize:none;font-size:0.82rem}
+.sticky-add-form .sticky-controls{display:flex;gap:0.35rem;align-items:center;flex-wrap:nowrap}
+.sticky-add-form .sticky-controls select{font-size:0.78rem;padding:0.15rem 0.3rem;border-radius:4px;border:1px solid #ccc}
+.sticky-add-form .sticky-controls input[type=color]{width:26px;height:26px;padding:0;border:1px solid #ccc;border-radius:4px;cursor:pointer}
+.sticky-add-form button{padding:0.25rem 0.55rem;border-radius:6px;border:0;background:#2b6ef6;color:#fff;font-size:0.8rem;cursor:pointer;white-space:nowrap}
+.sticky-notes-row{display:flex;flex-direction:row;gap:0.5rem;align-items:flex-start;overflow-x:auto;flex:1}
+.sticky-loading{font-size:0.82rem;color:#999;align-self:center}
+.sticky-note{min-width:155px;max-width:200px;padding:0.45rem 0.55rem;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.10);word-wrap:break-word;font-size:0.82rem;flex-shrink:0}
+.sticky-note textarea{width:100%;min-height:40px;border:0;background:transparent;resize:vertical;font-size:0.82rem}
+.note-content{font-size:0.82rem;line-height:1.4;white-space:pre-wrap;max-height:52px;overflow:hidden}
+.note-footer{display:flex;justify-content:space-between;align-items:center;gap:0.25rem;margin-top:0.3rem;flex-wrap:wrap}
+.note-footer small{font-size:0.7rem;color:#888;text-transform:capitalize}
+.note-footer button{padding:0.15rem 0.4rem;font-size:0.72rem;border-radius:4px;border:1px solid #ccc;background:#fff;cursor:pointer}
+.note-actions{display:flex;gap:0.25rem;align-items:center;margin-top:0.3rem;flex-wrap:wrap}
+.note-actions button{padding:0.15rem 0.4rem;font-size:0.72rem;border-radius:4px;border:1px solid #ccc;background:#fff;cursor:pointer}
+.note-actions select,.note-actions input[type=color]{font-size:0.75rem;padding:0.1rem;border-radius:4px;border:1px solid #ccc}
 

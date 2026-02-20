@@ -64,33 +64,27 @@ export default function StickyNotes() {
     );
   }
 
-  const left = notes.filter(n => (n.position || 'left') === 'left');
-  const right = notes.filter(n => (n.position || 'left') === 'right');
-
   return (
-    <>
-      <div className="sticky-add-form">
-        <form onSubmit={handleAdd}>
-          <textarea placeholder="New note" value={content} onChange={e => setContent(e.target.value)} />
-          <div className="sticky-controls">
-            <select value={severity} onChange={e => setSeverity(e.target.value as any)}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-            <select value={position} onChange={e => setPosition(e.target.value as any)}>
-              <option value="left">Left</option>
-              <option value="right">Right</option>
-            </select>
-            <input type="color" value={color || '#fff9b1'} onChange={e => setColor(e.target.value)} title="Choose color" />
-            <button type="submit">Add</button>
-          </div>
-        </form>
-      </div>
+    <div className="sticky-bar">
+      {/* Add-note form */}
+      <form className="sticky-add-form" onSubmit={handleAdd}>
+        <textarea placeholder="New note…" value={content} onChange={e => setContent(e.target.value)} />
+        <div className="sticky-controls">
+          <select value={severity} onChange={e => setSeverity(e.target.value as any)}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <input type="color" value={color || '#fff9b1'} onChange={e => setColor(e.target.value)} title="Choose color" />
+          <button type="submit">Add</button>
+        </div>
+      </form>
 
-      <div className="sticky-container sticky-left">{loading ? 'Loading…' : left.map(renderNote)}</div>
-      <div className="sticky-container sticky-right">{loading ? 'Loading…' : right.map(renderNote)}</div>
-    </>
+      {/* All notes in a horizontal row */}
+      <div className="sticky-notes-row">
+        {loading ? <span className="sticky-loading">Loading…</span> : notes.map(renderNote)}
+      </div>
+    </div>
   );
 }
 
