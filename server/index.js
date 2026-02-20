@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
@@ -19,6 +21,82 @@ const db = await mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
+});
+
+const JWT_SECRET = process.env.JWT_SECRET || 'myhomeproject_secret_2026';
+
+// Ensure users table exists
+await db.execute(
+  `CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(255),
+    password_hash VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`
+);
+
+// Auth middleware
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: 'No token' });
+  const token = header.split(' ')[1];
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// POST /api/auth/register
+app.post('/api/auth/register', async (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const [result] = await db.execute(
+      'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+      [username, email || null, hash]
+    );
+    const token = jwt.sign({ id: result.insertId, username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, username });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Username already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  try {
+    const [rows] = await db.execute('SELECT * FROM users WHERE username = ?', [username]);
+    if (!rows.length) return res.status(401).json({ error: 'Invalid username or password' });
+    const user = rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.status(401).json({ error: 'Invalid username or password' });
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, username: user.username });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/reset-password
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { username, newPassword } = req.body;
+  if (!username || !newPassword) return res.status(400).json({ error: 'Username and new password required' });
+  try {
+    const [rows] = await db.execute('SELECT id FROM users WHERE username = ?', [username]);
+    if (!rows.length) return res.status(404).json({ error: 'Username not found' });
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.execute('UPDATE users SET password_hash = ? WHERE username = ?', [hash, username]);
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Ensure activities table exists
