@@ -1,0 +1,79 @@
+.bt-app {
+  background-color: #f5f5f5;
+  min-height: 100%;
+  padding: 0.5rem 0;
+}
+
+.bt-layout {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  min-height: calc(100vh - 2rem);
+}
+
+.bt-sidebar {
+  width: 320px;
+  min-width: 280px;
+  background-color: #fff;
+  padding: 1.5rem;
+  border-right: 2px solid #e0e0e0;
+  overflow-y: auto;
+  box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+}
+
+.bt-form-section {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+.bt-form-section:last-of-type {
+  border-bottom: none;
+}
+
+.bt-main {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.bt-month-nav {
+  margin-bottom: 1.5rem;
+}
+
+.bt-summary {
+  margin-bottom: 1.5rem;
+}
+
+.bt-list {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+}
+
+.bt-error {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.bt-spinner {
+  text-align: center;
+  padding: 2rem;
+  color: #999;
+}
+
+@media (max-width: 900px) {
+  .bt-layout {
+    flex-direction: column;
+  }
+  .bt-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 2px solid #e0e0e0;
+  }
+}

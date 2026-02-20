@@ -4,15 +4,17 @@ import AssetManager from './components/AssetManager';
 import AccountManager from './components/AccountManager';
 import ActivityManager from './components/ActivityManager';
 import StockManager from './components/StockManager';
+import BudgetTracker from './budget/BudgetTracker';
 import StickyNotes from './components/StickyNotes';
 
-type View = 'assets' | 'accounts' | 'activities' | 'stocks';
+type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget';
 
 const NAV_ITEMS: { id: View; label: string }[] = [
   { id: 'assets',     label: 'Home Assets' },
   { id: 'accounts',   label: 'Banking Accounts' },
   { id: 'activities', label: 'Activity Scheduler' },
   { id: 'stocks',     label: 'Stocks Portfolio' },
+  { id: 'budget',     label: 'Budget Tracker' },
 ];
 
 function App() {
@@ -30,6 +32,7 @@ function App() {
           {view === 'accounts'   && <AccountManager />}
           {view === 'activities' && <ActivityManager />}
           {view === 'stocks'     && <StockManager />}
+          {view === 'budget'     && <BudgetTracker />}
         </main>
 
         {/* Right-side navigation */}

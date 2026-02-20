@@ -1,0 +1,95 @@
+.container {
+  background-color: transparent;
+  border-radius: 0;
+  padding: 1.5rem 0;
+  margin-bottom: 2rem;
+  box-shadow: none;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.monthSection {
+  flex: 1;
+  text-align: center;
+}
+
+.navButton {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 45px;
+  min-height: 40px;
+}
+
+.navButton:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+}
+
+.navButton:active {
+  transform: scale(0.95);
+}
+
+.monthDisplay {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.carryOverButton {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.carryOverButton:hover {
+  background-color: #218838;
+  transform: translateY(-2px);
+}
+
+.carryOverButton:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 768px) {
+  .monthDisplay {
+    font-size: 1.2rem;
+  }
+
+  .navButton {
+    min-width: 40px;
+    min-height: 36px;
+    padding: 0.4rem 0.8rem;
+  }
+}

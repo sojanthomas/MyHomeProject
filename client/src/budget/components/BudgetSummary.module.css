@@ -1,0 +1,97 @@
+.container {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+  flex-wrap: nowrap;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  flex: 1;
+  min-width: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 0.75rem;
+  padding: 1rem 1.5rem;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.icon {
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
+  opacity: 0.9;
+}
+
+.label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0.2rem 0;
+  letter-spacing: 0.4px;
+}
+
+.value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+  margin: 0.25rem 0;
+  word-break: break-word;
+}
+
+.value span {
+  display: inline-block;
+}
+
+.positive {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.positive .value {
+  color: white;
+}
+
+.negative {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.negative .value {
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .value {
+    font-size: 1.25rem;
+  }
+
+  .label {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    grid-template-columns: 1fr;
+  }
+}

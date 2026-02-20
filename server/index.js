@@ -47,6 +47,30 @@ await db.execute(
   )`
 );
 
+// Ensure budgets table exists
+await db.execute(
+  `CREATE TABLE IF NOT EXISTS budgets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    amount DECIMAL(15,2) NOT NULL,
+    month_year VARCHAR(7) NOT NULL UNIQUE,
+    closed BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`
+);
+
+// Ensure expenses table exists
+await db.execute(
+  `CREATE TABLE IF NOT EXISTS expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    scheduled BOOLEAN DEFAULT FALSE,
+    paid BOOLEAN DEFAULT FALSE,
+    month_year VARCHAR(7) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`
+);
+
 // Ensure stocks table exists
 await db.execute(
   `CREATE TABLE IF NOT EXISTS stocks (
@@ -227,6 +251,153 @@ app.delete('/api/stocks/:id', async (req, res) => {
   try {
     await db.execute('DELETE FROM stocks WHERE id=?', [id]);
     res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============= BUDGET TRACKER ROUTES =============
+const getCurrentMonthYear = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+const getNextMonthYear = (my) => {
+  const [y, m] = my.split('-');
+  let nm = parseInt(m) + 1, ny = parseInt(y);
+  if (nm > 12) { nm = 1; ny++; }
+  return `${ny}-${String(nm).padStart(2, '0')}`;
+};
+
+app.get('/api/budgets/:monthYear', async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      'SELECT id, amount, month_year as monthYear, closed, created_at as createdAt FROM budgets WHERE month_year=?',
+      [req.params.monthYear]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'No budget found for this month' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/months', async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT DISTINCT month_year FROM budgets ORDER BY month_year DESC');
+    res.json(rows.map(r => r.month_year));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/budgets', async (req, res) => {
+  const { amount, monthYear } = req.body;
+  const month = monthYear || getCurrentMonthYear();
+  try {
+    const [existing] = await db.execute('SELECT id FROM budgets WHERE month_year=?', [month]);
+    if (existing.length) {
+      await db.execute('UPDATE budgets SET amount=? WHERE month_year=?', [amount, month]);
+      const [updated] = await db.execute(
+        'SELECT id, amount, month_year as monthYear, closed, created_at as createdAt FROM budgets WHERE month_year=?', [month]);
+      return res.json(updated[0]);
+    }
+    const [result] = await db.execute('INSERT INTO budgets (amount, month_year) VALUES (?,?)', [amount, month]);
+    res.status(201).json({ id: result.insertId, amount: parseFloat(amount), monthYear: month, closed: false, createdAt: new Date().toISOString() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/expenses/:monthYear', async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      'SELECT id, title, amount, scheduled, paid, month_year as monthYear, created_at as createdAt FROM expenses WHERE month_year=? ORDER BY created_at DESC',
+      [req.params.monthYear]
+    );
+    res.json(rows.map(e => ({ ...e, amount: parseFloat(e.amount), paid: Boolean(e.paid), scheduled: Boolean(e.scheduled) })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/summary/:monthYear', async (req, res) => {
+  const { monthYear } = req.params;
+  try {
+    const [budgets] = await db.execute('SELECT amount, closed FROM budgets WHERE month_year=?', [monthYear]);
+    const budgetAmount = budgets.length ? parseFloat(budgets[0].amount) : 0;
+    const closed = budgets.length ? Boolean(budgets[0].closed) : false;
+    const [exps] = await db.execute(
+      'SELECT id, title, amount, scheduled, paid, created_at as createdAt FROM expenses WHERE month_year=? ORDER BY created_at DESC',
+      [monthYear]
+    );
+    const expenses = exps.map(e => ({ ...e, amount: parseFloat(e.amount), paid: Boolean(e.paid), scheduled: Boolean(e.scheduled) }));
+    const paidExpenses   = expenses.filter(e => !e.scheduled).reduce((s, e) => s + e.amount, 0);
+    const scheduledExpenses = expenses.filter(e => e.scheduled).reduce((s, e) => s + e.amount, 0);
+    const balance = budgetAmount - paidExpenses - scheduledExpenses;
+    res.json({ monthYear, budget: budgetAmount, closed, paidExpenses: +paidExpenses.toFixed(2), scheduledExpenses: +scheduledExpenses.toFixed(2), balance: +balance.toFixed(2), expenses });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/expenses', async (req, res) => {
+  const { title, amount, scheduled, paid, monthYear } = req.body;
+  const month = monthYear || getCurrentMonthYear();
+  try {
+    const [result] = await db.execute(
+      'INSERT INTO expenses (title, amount, scheduled, paid, month_year) VALUES (?,?,?,?,?)',
+      [title, amount, scheduled || false, paid || false, month]
+    );
+    res.status(201).json({ id: result.insertId, title, amount: parseFloat(amount), scheduled: Boolean(scheduled), paid: Boolean(paid), monthYear: month, createdAt: new Date().toISOString() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/expenses/:id', async (req, res) => {
+  const { title, amount, scheduled, paid } = req.body;
+  try {
+    const [cur] = await db.execute('SELECT * FROM expenses WHERE id=?', [req.params.id]);
+    if (!cur.length) return res.status(404).json({ error: 'Expense not found' });
+    const c = cur[0];
+    await db.execute(
+      'UPDATE expenses SET title=?, amount=?, scheduled=?, paid=? WHERE id=?',
+      [title ?? c.title, amount ?? c.amount, scheduled ?? c.scheduled, paid ?? c.paid, req.params.id]
+    );
+    res.json({ id: parseInt(req.params.id), title: title ?? c.title, amount: parseFloat(amount ?? c.amount), scheduled: Boolean(scheduled ?? c.scheduled), paid: Boolean(paid ?? c.paid), monthYear: c.month_year, createdAt: c.created_at });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/expenses/:id', async (req, res) => {
+  try {
+    const [result] = await db.execute('DELETE FROM expenses WHERE id=?', [req.params.id]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Expense not found' });
+    res.status(204).send();
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/expenses/month/:monthYear', async (req, res) => {
+  try {
+    await db.execute('DELETE FROM expenses WHERE month_year=?', [req.params.monthYear]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/expenses/:id/paid', async (req, res) => {
+  const { paid } = req.body;
+  if (typeof paid !== 'boolean') return res.status(400).json({ error: 'paid must be boolean' });
+  try {
+    const [result] = await db.execute('UPDATE expenses SET paid=? WHERE id=?', [paid, req.params.id]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Expense not found' });
+    res.json({ id: parseInt(req.params.id), paid });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/carryover/:monthYear', async (req, res) => {
+  const { monthYear } = req.params;
+  const nextMonth = getNextMonthYear(monthYear);
+  try {
+    const [exps] = await db.execute('SELECT title, amount, scheduled FROM expenses WHERE month_year=? ORDER BY id ASC', [monthYear]);
+    if (!exps.length) return res.json({ message: 'No expenses to carry over', count: 0, nextMonth });
+    for (const e of exps) {
+      await db.execute('INSERT INTO expenses (title, amount, scheduled, paid, month_year) VALUES (?,?,?,?,?)', [e.title, e.amount, e.scheduled, false, nextMonth]);
+    }
+    res.json({ message: `Carried over ${exps.length} expenses to ${nextMonth}`, count: exps.length, nextMonth });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/close-month/:monthYear', async (req, res) => {
+  const { monthYear } = req.params;
+  try {
+    const [result] = await db.execute('UPDATE expenses SET paid=TRUE WHERE month_year=? AND paid=FALSE', [monthYear]);
+    await db.execute('UPDATE budgets SET closed=TRUE WHERE month_year=?', [monthYear]);
+    res.json({ message: `Closed payments for ${monthYear}`, updated: result.affectedRows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
