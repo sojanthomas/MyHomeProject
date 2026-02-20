@@ -3,6 +3,7 @@ import AccountForm from './AccountForm';
 
 interface Account {
   id?: number;
+  account_name?: string;
   account_number: string;
   amount: number;
   maturity_date?: string;
@@ -66,6 +67,7 @@ export default function AccountManager() {
         <thead>
           <tr>
             <th>Account #</th>
+            <th>Account Name</th>
             <th>Amount</th>
             <th>Balance</th>
             <th>Maturity</th>
@@ -76,7 +78,7 @@ export default function AccountManager() {
         </thead>
         <tbody>
           {accounts.length === 0 && (
-            <tr className="empty-row"><td colSpan={7}>No accounts yet. Click "Add Account" to create one.</td></tr>
+            <tr className="empty-row"><td colSpan={8}>No accounts yet. Click "Add Account" to create one.</td></tr>
           )}
           {accounts.map((acct) => {
             const days = daysUntil(acct.maturity_date);
@@ -84,6 +86,7 @@ export default function AccountManager() {
             return (
               <tr key={acct.id}>
                 <td className="asset-name">{acct.account_number}</td>
+                <td className="asset-name">{acct.account_name || '-'}</td>
                 <td className="asset-value">{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(acct.amount))}</td>
                 <td>{acct.balance != null ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(acct.balance)) : '-'}</td>
                 <td className="asset-date">{acct.maturity_date ? new Date(acct.maturity_date).toLocaleDateString() : '-'}</td>

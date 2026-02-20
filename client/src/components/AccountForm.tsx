@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 interface Account {
   id?: number;
+  account_name?: string;
   account_number: string;
   amount: number;
   maturity_date?: string;
@@ -11,6 +12,7 @@ interface Account {
 
 export default function AccountForm({ account, onSave, onCancel }: { account?: Account | null; onSave: (a: Account) => void; onCancel: () => void; }) {
   const [form, setForm] = useState({
+    account_name: '',
     account_number: '',
     amount: '',
     maturity_date: '',
@@ -21,6 +23,7 @@ export default function AccountForm({ account, onSave, onCancel }: { account?: A
   useEffect(() => {
     if (account) {
       setForm({
+        account_name: account.account_name || '',
         account_number: account.account_number || '',
         amount: String(account.amount ?? ''),
         maturity_date: account.maturity_date ? account.maturity_date.split('T')[0] : '',
@@ -28,7 +31,7 @@ export default function AccountForm({ account, onSave, onCancel }: { account?: A
         comments: account.comments || '',
       });
     } else {
-      setForm({ account_number: '', amount: '', maturity_date: '', balance: '', comments: '' });
+      setForm({ account_name: '', account_number: '', amount: '', maturity_date: '', balance: '', comments: '' });
     }
   }, [account]);
 
@@ -40,6 +43,7 @@ export default function AccountForm({ account, onSave, onCancel }: { account?: A
     e.preventDefault();
     onSave({
       ...account,
+      account_name: form.account_name,
       account_number: form.account_number,
       amount: parseFloat(form.amount || '0'),
       maturity_date: form.maturity_date || undefined,
@@ -51,8 +55,8 @@ export default function AccountForm({ account, onSave, onCancel }: { account?: A
   return (
     <form className="asset-form" onSubmit={handleSubmit}>
       <div className="form-row">
+        <input name="account_name" value={form.account_name} onChange={handleChange} placeholder="Account name" />
         <input name="account_number" value={form.account_number} onChange={handleChange} placeholder="Account number" required />
-        <input name="amount" value={form.amount} onChange={handleChange} placeholder="Amount" type="number" step="0.01" required />
       </div>
       <div className="form-row">
         <input name="maturity_date" value={form.maturity_date} onChange={handleChange} placeholder="Maturity date" type="date" />
