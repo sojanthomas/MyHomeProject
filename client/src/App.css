@@ -1,8 +1,7 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  padding: 0;
+  text-align: left;
 }
 
 .logo {
@@ -106,10 +105,12 @@
 /* App layout: content with room for fixed right nav */
 .app-layout{
   display:block;
-  padding-right:170px;
-  min-height:80vh;
+  padding: 1.5rem 175px 1.5rem 1.5rem;
+  min-height:100vh;
+  box-sizing:border-box;
+  width:100%;
 }
-.app-content{min-width:0}
+.app-content{width:100%;min-width:0}
 .app-title{margin-top:0;margin-bottom:1rem;font-size:1.4rem}
 
 /* Right-side nav */
