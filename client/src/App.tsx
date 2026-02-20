@@ -13,9 +13,12 @@ function App() {
           <AccountManager />
         </div>
         <aside className="right-column">
-          <ActivityManager />
         </aside>
       </div>
+        {/* Place Activity Scheduler after main content (bottom) */}
+        <div style={{ marginTop: '1rem' }}>
+          <ActivityManager />
+        </div>
     </div>
   );
 }

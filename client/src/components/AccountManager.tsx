@@ -25,29 +25,51 @@ export default function AccountManager() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) setAccounts(JSON.parse(raw));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
-  }, [accounts]);
-
-  const save = (acct: Account) => {
-    if (acct.id) {
-      setAccounts(a => a.map(x => x.id === acct.id ? { ...x, ...acct } : x));
-    } else {
-      const id = Date.now();
-      setAccounts(a => [{ ...acct, id }, ...a]);
+  const fetchAccounts = async () => {
+    try {
+      const res = await fetch('/api/accounts');
+      const data = await res.json();
+      setAccounts(data);
+    } catch (err) {
+      console.error('Failed to fetch accounts', err);
     }
-    setShowForm(false);
-    setEditing(null);
   };
 
-  const remove = (id?: number) => {
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  const save = async (acct: Account) => {
+    try {
+      if (acct.id) {
+        await fetch(`/api/accounts/${acct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(acct),
+        });
+      } else {
+        await fetch('/api/accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(acct),
+        });
+      }
+      setShowForm(false);
+      setEditing(null);
+      fetchAccounts();
+    } catch (err) {
+      console.error('Failed to save account', err);
+    }
+  };
+
+  const remove = async (id?: number) => {
     if (!id) return;
-    setAccounts(a => a.filter(x => x.id !== id));
+    try {
+      await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+      fetchAccounts();
+    } catch (err) {
+      console.error('Failed to delete account', err);
+    }
   };
 
   return (
