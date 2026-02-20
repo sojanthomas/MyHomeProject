@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import ActivityForm from './ActivityForm';
 
 interface Activity {
@@ -9,6 +9,14 @@ interface Activity {
   comments?: string;
   priority?: string;
   assigned_to?: string;
+}
+
+type SortDir = 'asc' | 'desc';
+type ActivityCol = keyof Omit<Activity, 'id'>;
+
+function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: SortDir }) {
+  if (col !== sortCol) return <span className="sort-icon">⇅</span>;
+  return <span className="sort-icon active">{sortDir === 'asc' ? '▲' : '▼'}</span>;
 }
 
 function daysUntil(date?: string) {
@@ -22,6 +30,14 @@ export default function ActivityManager() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [editing, setEditing] = useState<Activity | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [sortCol, setSortCol] = useState<ActivityCol>('activity_datetime');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  function toggleSort(col: ActivityCol) {
+    if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
 
   const fetchActivities = async () => {
     const res = await fetch('/api/activities');
@@ -57,11 +73,28 @@ export default function ActivityManager() {
     fetchActivities();
   };
 
+  const displayed = useMemo(() => {
+    const q = filter.toLowerCase();
+    const filtered = q
+      ? activities.filter(a =>
+          [a.activity, a.activity_datetime, a.priority, a.assigned_to, a.comments, a.description]
+            .some(v => (v ?? '').toLowerCase().includes(q))
+        )
+      : activities;
+    return [...filtered].sort((a, b) => {
+      const av = a[sortCol] ?? '';
+      const bv = b[sortCol] ?? '';
+      const cmp = String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [activities, filter, sortCol, sortDir]);
+
   return (
     <div className="asset-manager activity-manager">
       <div className="asset-header">
         <h2>Activity Scheduler</h2>
-        <div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input className="table-filter" placeholder="Filter…" value={filter} onChange={e => setFilter(e.target.value)} />
           <button onClick={() => { setEditing(null); setShowForm(s => !s); }}>{showForm ? 'Close' : 'Schedule Activity'}</button>
         </div>
       </div>
@@ -73,20 +106,20 @@ export default function ActivityManager() {
       <table className="assets-table">
         <thead>
           <tr>
-            <th>Date / Time</th>
-            <th>Activity</th>
-            <th>Priority</th>
-            <th>Assigned</th>
-            <th>Comments</th>
+            <th className="sortable" onClick={() => toggleSort('activity_datetime')}>Date / Time <SortIcon col="activity_datetime" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('activity')}>Activity <SortIcon col="activity" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('priority')}>Priority <SortIcon col="priority" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('assigned_to')}>Assigned <SortIcon col="assigned_to" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('comments')}>Comments <SortIcon col="comments" sortCol={sortCol} sortDir={sortDir} /></th>
             <th>Flag</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {activities.length === 0 && (
-            <tr className="empty-row"><td colSpan={7}>No activities scheduled.</td></tr>
+          {displayed.length === 0 && (
+            <tr className="empty-row"><td colSpan={7}>{filter ? 'No matching activities.' : 'No activities scheduled.'}</td></tr>
           )}
-          {activities.map(act => {
+          {displayed.map(act => {
             const days = daysUntil(act.activity_datetime);
             const soon = days <= 7 && days >= 0;
             return (

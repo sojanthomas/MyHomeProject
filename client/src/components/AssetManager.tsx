@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import AssetForm from './AssetForm';
 import '../App.css';
 
@@ -10,10 +10,26 @@ interface Asset {
   purchase_date?: string;
 }
 
+type SortDir = 'asc' | 'desc';
+type AssetCol = keyof Omit<Asset, 'id'>;
+
+function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: SortDir }) {
+  if (col !== sortCol) return <span className="sort-icon">⇅</span>;
+  return <span className="sort-icon active">{sortDir === 'asc' ? '▲' : '▼'}</span>;
+}
+
 export default function AssetManager() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [sortCol, setSortCol] = useState<AssetCol>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  function toggleSort(col: AssetCol) {
+    if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
 
   const fetchAssets = async () => {
     const res = await fetch('/api/assets');
@@ -48,11 +64,30 @@ export default function AssetManager() {
     fetchAssets();
   };
 
+  const displayed = useMemo(() => {
+    const q = filter.toLowerCase();
+    const filtered = q
+      ? assets.filter(a =>
+          [a.name, a.location, String(a.value), a.purchase_date]
+            .some(v => (v ?? '').toLowerCase().includes(q))
+        )
+      : assets;
+    return [...filtered].sort((a, b) => {
+      const av = a[sortCol] ?? '';
+      const bv = b[sortCol] ?? '';
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [assets, filter, sortCol, sortDir]);
+
   return (
     <div className="asset-manager">
       <div className="asset-header">
         <h2>Home Assets</h2>
-        <div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input className="table-filter" placeholder="Filter…" value={filter} onChange={e => setFilter(e.target.value)} />
           <button onClick={() => { setEditing(null); setShowForm(s => !s); }}>
             {showForm ? 'Close' : 'Add Asset'}
           </button>
@@ -64,18 +99,18 @@ export default function AssetManager() {
       <table className="assets-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Value</th>
-            <th>Location</th>
-            <th>Purchase Date</th>
+            <th className="sortable" onClick={() => toggleSort('name')}>Name <SortIcon col="name" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('value')}>Value <SortIcon col="value" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('location')}>Location <SortIcon col="location" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className="sortable" onClick={() => toggleSort('purchase_date')}>Purchase Date <SortIcon col="purchase_date" sortCol={sortCol} sortDir={sortDir} /></th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {assets.length === 0 && (
-            <tr className="empty-row"><td colSpan={5}>No assets yet. Click "Add Asset" to create one.</td></tr>
+          {displayed.length === 0 && (
+            <tr className="empty-row"><td colSpan={5}>{filter ? 'No matching assets.' : 'No assets yet. Click "Add Asset" to create one.'}</td></tr>
           )}
-          {assets.map((asset) => (
+          {displayed.map((asset) => (
             <tr key={asset.id}>
               <td className="asset-name">{asset.name}</td>
               <td className="asset-value">{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(asset.value))}</td>
