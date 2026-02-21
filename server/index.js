@@ -676,6 +676,135 @@ app.get('/api/news/market', async (_req, res) => {
   }
 });
 
+// ── World News Route ─────────────────────────────────
+const WORLD_SOURCES = [
+  { name: 'BBC News',         url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+  { name: 'Reuters World',    url: 'https://feeds.reuters.com/Reuters/worldNews' },
+  { name: 'AP News',          url: 'https://rsshub.app/apnews/topics/apf-topnews' },
+  { name: 'CNN World',        url: 'http://rss.cnn.com/rss/edition_world.rss' },
+  { name: 'The Guardian',     url: 'https://www.theguardian.com/world/rss' },
+  { name: 'Al Jazeera',       url: 'https://www.aljazeera.com/xml/rss/all.xml' },
+  { name: 'NPR News',         url: 'https://feeds.npr.org/1001/rss.xml' },
+  { name: 'DW World',         url: 'https://rss.dw.com/rdf/rss-en-all' },
+];
+
+const WORLD_CRITICAL = [
+  /\b(war|wars|warfare|battle|battles)\b/gi,
+  /\b(missile|missiles|nuclear|bombing|bombed|airstrike|airstrikes)\b/gi,
+  /\b(genocide|massacre|atrocity|atrocities)\b/gi,
+  /\b(terrorist|terrorism|attack|attacks|explosion|explosions)\b/gi,
+  /\b(earthquake|tsunami|hurricane|tornado|catastrophe|catastrophic)\b/gi,
+  /\b(pandemic|epidemic|outbreak|ebola|cholera)\b/gi,
+  /\b(coup|invasion|invaded|military offensive)\b/gi,
+  /\b(assassination|assassinated|killed (\d+ |dozens|hundreds|thousands))\b/gi,
+];
+
+const WORLD_HIGH = [
+  /\b(conflict|fighting|clashes|troops|soldiers|forces)\b/gi,
+  /\b(protest|protests|riot|riots|unrest|uprising)\b/gi,
+  /\b(sanctions|embargo|expelled|detained|arrested|accused)\b/gi,
+  /\b(flood|floods|wildfire|wildfires|drought|famine)\b/gi,
+  /\b(crisis|emergency|urgent|warning|alert)\b/gi,
+  /\b(recession|economic collapse|debt crisis|hyperinflation)\b/gi,
+  /\b(death toll|casualties|wounded|injuries)\b/gi,
+  /\b(election fraud|impeach|indicted|charged)\b/gi,
+];
+
+const WORLD_MEDIUM = [
+  /\b(election|elections|vote|votes|referendum|poll)\b/gi,
+  /\b(summit|talks|negotiations|agreement|treaty|deal)\b/gi,
+  /\b(trade war|tariff|tariffs|ban|boycott)\b/gi,
+  /\b(climate|pollution|emissions|carbon|refugee|migrants)\b/gi,
+  /\b(scandal|corruption|investigation|probe)\b/gi,
+  /\b(resign|resigned|fired|ousted|removed from office)\b/gi,
+  /\b(disease|virus|health|hospital|vaccines?)\b/gi,
+];
+
+const WORLD_CATEGORIES = [
+  { name: 'Conflict & War',  patterns: [/\b(war|battle|military|troops|missile|airstrike|invasion|offensive|combat|ceasefire)\b/gi] },
+  { name: 'Disaster',        patterns: [/\b(earthquake|tsunami|flood|hurricane|tornado|wildfire|drought|famine|disaster|catastrophe)\b/gi] },
+  { name: 'Politics',        patterns: [/\b(election|president|prime minister|government|parliament|senate|congress|vote|policy|diplomatic|minister)\b/gi] },
+  { name: 'Health',          patterns: [/\b(health|disease|virus|pandemic|vaccine|hospital|cancer|WHO|CDC|outbreak|epidemic)\b/gi] },
+  { name: 'Economy',         patterns: [/\b(economy|economic|markets?|trade|GDP|inflation|recession|currency|bank|investment|tariff|budget)\b/gi] },
+  { name: 'Science & Tech',  patterns: [/\b(science|technology|space|AI|research|discovery|NASA|climate|innovation|quantum|robot)\b/gi] },
+  { name: 'Environment',     patterns: [/\b(environment|climate change|carbon|emissions|species|ocean|deforestation|pollution|COP)\b/gi] },
+  { name: 'Sports',          patterns: [/\b(football|soccer|Olympics|tennis|cricket|basketball|championship|World Cup|athlete|tournament)\b/gi] },
+];
+
+function scoreWorldSeverity(text) {
+  const t = text || '';
+  const crit   = WORLD_CRITICAL.some(re => re.test(t));
+  const high   = WORLD_HIGH.some(re => re.test(t));
+  const medium = WORLD_MEDIUM.some(re => re.test(t));
+  if (crit)   return { severity: 'critical', severityLabel: 'Critical' };
+  if (high)   return { severity: 'high',     severityLabel: 'High' };
+  if (medium) return { severity: 'medium',   severityLabel: 'Medium' };
+  return              { severity: 'low',      severityLabel: 'Low' };
+}
+
+function detectCategory(text) {
+  const t = text || '';
+  for (const cat of WORLD_CATEGORIES) {
+    if (cat.patterns.some(re => { re.lastIndex = 0; return re.test(t); }))
+      return cat.name;
+  }
+  return 'General';
+}
+
+async function fetchWorldRSS(source) {
+  try {
+    const res = await fetch(source.url, {
+      signal: AbortSignal.timeout(6000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HomeAssetBot/1.0)' },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+    const parsed = parser.parse(xml);
+    const channel = parsed?.rss?.channel || parsed?.feed;
+    if (!channel) return [];
+    const items = channel.item || channel.entry || [];
+    const arr = Array.isArray(items) ? items : [items];
+    return arr.slice(0, 20).map(item => {
+      const title   = item.title?.['#text'] || item.title || '';
+      const desc    = item.description?.['#text'] || item.description ||
+                      item.summary?.['#text'] || item.summary || '';
+      const link    = item.link?.['#text'] || item.link?.['@_href'] || item.link || '';
+      const pubDate = item.pubDate || item.published || item.updated || item['dc:date'] || null;
+      const combined = String(title) + ' ' + String(desc);
+      return {
+        id:          Buffer.from((link || title) + source.name).toString('base64').slice(0, 32),
+        title:       String(title).trim(),
+        description: String(desc).replace(/<[^>]*>/g, '').trim().slice(0, 220),
+        link:        String(link).trim(),
+        pubDate:     pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+        source:      source.name,
+        category:    detectCategory(combined),
+        ...scoreWorldSeverity(combined),
+      };
+    }).filter(i => i.title);
+  } catch {
+    return [];
+  }
+}
+
+app.get('/api/news/world', async (_req, res) => {
+  try {
+    const results = await Promise.allSettled(WORLD_SOURCES.map(fetchWorldRSS));
+    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    const seen = new Set();
+    const unique = all.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; });
+    unique.sort((a, b) => {
+      const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+      if (sevOrder[a.severity] !== sevOrder[b.severity]) return sevOrder[a.severity] - sevOrder[b.severity];
+      return new Date(b.pubDate) - new Date(a.pubDate);
+    });
+    res.json(unique.slice(0, 100));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
