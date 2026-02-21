@@ -9,8 +9,9 @@ import StickyNotes from './components/StickyNotes';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
+import StockNews from './components/StockNews';
 
-type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget';
+type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget' | 'news';
 type AuthScreen = 'login' | 'register' | 'forgot';
 
 const NAV_ITEMS: { id: View; label: string }[] = [
@@ -18,6 +19,7 @@ const NAV_ITEMS: { id: View; label: string }[] = [
   { id: 'accounts',   label: 'Banking Accounts' },
   { id: 'activities', label: 'Activity Scheduler' },
   { id: 'stocks',     label: 'Stocks Portfolio' },
+  { id: 'news',       label: 'Market News' },
   { id: 'budget',     label: 'Budget Tracker' },
 ];
 
@@ -75,6 +77,7 @@ function App() {
           {view === 'accounts'   && <AccountManager />}
           {view === 'activities' && <ActivityManager />}
           {view === 'stocks'     && <StockManager />}
+          {view === 'news'       && <StockNews />}
           {view === 'budget'     && <BudgetTracker />}
         </main>
 

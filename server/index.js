@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { XMLParser } from 'fast-xml-parser';
 
 dotenv.config();
 
@@ -550,6 +551,126 @@ app.delete('/api/assets/:id', async (req, res) => {
   try {
     await db.execute('DELETE FROM assets WHERE id=?', [id]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Market News Route ─────────────────────────────────────
+const RSS_SOURCES = [
+  { name: 'Yahoo Finance',  url: 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US' },
+  { name: 'MarketWatch',   url: 'https://feeds.marketwatch.com/marketwatch/topstories/' },
+  { name: 'CNBC Markets',  url: 'https://search.cnbc.com/rs/search/combinedcache/orderedby/date/output/rss/search.html?partnerId=wrss01&id=10000664' },
+  { name: 'Reuters',       url: 'https://feeds.reuters.com/reuters/businessNews' },
+  { name: 'Seeking Alpha', url: 'https://seekingalpha.com/market_currents.xml' },
+];
+
+const POSITIVE = [
+  [/\b(soar|soars|soared|soaring)\b/gi, 4],
+  [/\b(surge|surges|surged|surging)\b/gi, 4],
+  [/\brecord high\b/gi, 4],
+  [/\b(rally|rallies|rallied|rallying)\b/gi, 3],
+  [/\b(jump|jumps|jumped|jumping)\b/gi, 3],
+  [/\b(upgrade|upgrades|upgraded)\b/gi, 3],
+  [/\bbeat(s| expectations| estimates)\b/gi, 3],
+  [/\bbullish\b/gi, 3],
+  [/\b(boost|boosts|boosted)\b/gi, 2],
+  [/\b(gain|gains|gained)\b/gi, 2],
+  [/\b(rise|rises|rose|rising)\b/gi, 2],
+  [/\b(grow|grows|grew|growth)\b/gi, 2],
+  [/\b(profit|profits|profitability)\b/gi, 2],
+  [/\b(recover|recovery|rebounds?)\b/gi, 2],
+  [/\bstrong(er)?\b/gi, 2],
+  [/\bopportunity\b/gi, 1],
+];
+
+const NEGATIVE = [
+  [/\b(bankrupt|bankruptcy)\b/gi, -5],
+  [/\b(collapse|collapses|collapsed)\b/gi, -5],
+  [/\b(crash|crashes|crashed|crashing)\b/gi, -5],
+  [/\b(plunge|plunges|plunged|plunging)\b/gi, -4],
+  [/\brecession\b/gi, -4],
+  [/\b(slump|slumps|slumped)\b/gi, -3],
+  [/\b(miss(es| expectations| estimates)|missed)\b/gi, -3],
+  [/\b(downgrade|downgrades|downgraded)\b/gi, -3],
+  [/\bbearish\b/gi, -3],
+  [/\b(layoff|layoffs)\b/gi, -3],
+  [/\b(warn|warns|warning|warnings)\b/gi, -2],
+  [/\b(fall|falls|fell|falling)\b/gi, -2],
+  [/\b(drop|drops|dropped|dropping)\b/gi, -2],
+  [/\b(decline|declines|declined)\b/gi, -2],
+  [/\b(loss|losses)\b/gi, -2],
+  [/\b(cut|cuts)\b/gi, -2],
+  [/\bweak(er|ness)?\b/gi, -2],
+  [/\bconcern(s|ed)?\b/gi, -1],
+  [/\brisk(s|y)?\b/gi, -1],
+  [/\binflation\b/gi, -1],
+];
+
+function scoreSentiment(text) {
+  let score = 0;
+  const t = text || '';
+  for (const [re, v] of POSITIVE) score += (t.match(re) || []).length * v;
+  for (const [re, v] of NEGATIVE) score += (t.match(re) || []).length * v;
+  return score;
+}
+
+function sentimentLabel(score) {
+  if (score >= 5)  return { label: 'Strong Bullish',  level: 'high-positive',  direction: 'up' };
+  if (score >= 2)  return { label: 'Bullish',          level: 'positive',       direction: 'up' };
+  if (score <= -5) return { label: 'Strong Bearish',   level: 'high-negative',  direction: 'down' };
+  if (score <= -2) return { label: 'Bearish',           level: 'negative',       direction: 'down' };
+  return              { label: 'Neutral',           level: 'neutral',        direction: 'neutral' };
+}
+
+async function fetchRSS(source) {
+  try {
+    const res = await fetch(source.url, {
+      signal: AbortSignal.timeout(6000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HomeAssetBot/1.0)' },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+    const parsed = parser.parse(xml);
+    const channel = parsed?.rss?.channel || parsed?.feed;
+    if (!channel) return [];
+    const items = channel.item || channel.entry || [];
+    const arr = Array.isArray(items) ? items : [items];
+    return arr.slice(0, 20).map(item => {
+      const title   = item.title?.['#text'] || item.title || '';
+      const desc    = item.description?.['#text'] || item.description ||
+                      item.summary?.['#text'] || item.summary || '';
+      const link    = item.link?.['#text'] || item.link?.['@_href'] || item.link || '';
+      const pubDate = item.pubDate || item.published || item.updated || item['dc:date'] || null;
+      const score   = scoreSentiment(title + ' ' + desc);
+      const sentiment = sentimentLabel(score);
+      return {
+        id:        Buffer.from(link || title).toString('base64').slice(0, 32),
+        title:     String(title).trim(),
+        description: String(desc).replace(/<[^>]*>/g, '').trim().slice(0, 220),
+        link:      String(link).trim(),
+        pubDate:   pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+        source:    source.name,
+        score,
+        ...sentiment,
+      };
+    }).filter(i => i.title);
+  } catch {
+    return [];
+  }
+}
+
+app.get('/api/news/market', async (_req, res) => {
+  try {
+    const results = await Promise.allSettled(RSS_SOURCES.map(fetchRSS));
+    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    // Deduplicate by id
+    const seen = new Set();
+    const unique = all.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; });
+    // Sort newest first
+    unique.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+    res.json(unique.slice(0, 80));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
