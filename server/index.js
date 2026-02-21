@@ -1019,84 +1019,115 @@ function computeSignal(rsi, vwap, price, bidVol, askVol, changePercent, sma20) {
   return { action, confidence, color, score, reasons };
 }
 
+const YF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Origin': 'https://finance.yahoo.com',
+  'Referer': 'https://finance.yahoo.com/',
+};
+
+async function fetchYFChart(symbol, interval, range) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${interval}&range=${range}&includePrePost=false`;
+  const res = await fetch(url, { headers: YF_HEADERS, signal: AbortSignal.timeout(9000) });
+  const json = await res.json();
+  if (json?.chart?.error) throw new Error(json.chart.error.description || 'Yahoo Finance error');
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error(`Symbol '${symbol}' not found`);
+  return result;
+}
+
 app.get('/api/market/level2/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase().trim();
   try {
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': 'application/json',
-    };
-
-    // Fetch quote + chart in parallel
-    const [quoteRes, chartRes] = await Promise.all([
-      fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=symbol,shortName,longName,regularMarketPrice,bid,bidSize,ask,askSize,regularMarketVolume,regularMarketChangePercent,regularMarketDayLow,regularMarketDayHigh,regularMarketOpen,regularMarketPreviousClose,fiftyTwoWeekLow,fiftyTwoWeekHigh,marketCap,averageVolume,regularMarketTime`, { headers, signal: AbortSignal.timeout(8000) }),
-      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=5m&range=1d&includePrePost=false`, { headers, signal: AbortSignal.timeout(8000) }),
+    // Two chart calls in parallel:
+    // 1) 5m intraday for current price, VWAP, recent candles
+    // 2) 1d/3mo for RSI(14) and SMA calculations
+    const [intraday, history] = await Promise.all([
+      fetchYFChart(symbol, '5m', '1d'),
+      fetchYFChart(symbol, '1d', '3mo'),
     ]);
 
-    const [quoteJson, chartJson] = await Promise.all([quoteRes.json(), chartRes.json()]);
-    const quote = quoteJson?.quoteResponse?.result?.[0];
-    if (!quote) return res.status(404).json({ error: `Symbol '${symbol}' not found` });
+    // ── Meta (price, name, day stats, 52-week) from intraday chart ──
+    const meta = intraday.meta;
+    const price     = meta.regularMarketPrice || 0;
+    const prevClose = meta.chartPreviousClose || meta.previousClose || price;
+    const name      = meta.longName || meta.shortName || symbol;
 
-    const price   = quote.regularMarketPrice || 0;
-    const bid     = quote.bid  || price * 0.999;
-    const ask     = quote.ask  || price * 1.001;
-    const bidSize = (quote.bidSize || 10) * 100;
-    const askSize = (quote.askSize || 10) * 100;
+    // Estimate typical bid/ask spread from price level
+    let halfSpread = price < 10 ? 0.01 : price < 50 ? 0.02 : price < 200 ? 0.05 : price < 500 ? 0.10 : 0.25;
+    const bid = +(price - halfSpread).toFixed(4);
+    const ask = +(price + halfSpread).toFixed(4);
+    // Typical block size heuristic
+    const bidSize = Math.round(1000 / Math.max(price, 1)) * 100;
+    const askSize = bidSize;
 
-    // Chart indicators
-    const chartResult = chartJson?.chart?.result?.[0];
-    const closes  = chartResult?.indicators?.quote?.[0]?.close?.filter(Number.isFinite) || [];
-    const highs   = chartResult?.indicators?.quote?.[0]?.high?.filter(Number.isFinite) || [];
-    const lows    = chartResult?.indicators?.quote?.[0]?.low?.filter(Number.isFinite) || [];
-    const volumes = chartResult?.indicators?.quote?.[0]?.volume?.filter(Number.isFinite) || [];
-    const timestamps = chartResult?.timestamp || [];
+    // ── Intraday candles ──
+    const iq = intraday.indicators?.quote?.[0] || {};
+    const iCloses  = (iq.close  || []).filter(Number.isFinite);
+    const iHighs   = (iq.high   || []).filter(Number.isFinite);
+    const iLows    = (iq.low    || []).filter(Number.isFinite);
+    const iVolumes = (iq.volume || []).filter(Number.isFinite);
+    const iTS      = intraday.timestamp || [];
 
-    const rsi   = calcRSI(closes);
-    const vwap  = calcVWAP(highs, lows, closes, volumes);
-    const sma20 = calcSMA(closes, 20);
-    const sma9  = calcSMA(closes, 9);
+    // ── Historical daily closes for RSI / SMA ──
+    const hq      = history.indicators?.quote?.[0] || {};
+    const hCloses = (hq.close || []).filter(Number.isFinite);
+
+    const rsi   = calcRSI(hCloses);
+    const vwap  = calcVWAP(iHighs, iLows, iCloses, iVolumes);
+    const sma20 = calcSMA(hCloses, 20);
+    const sma9  = calcSMA(hCloses, 9);
+
+    // Day open = first valid open candle
+    const firstOpen = (iq.open || []).find(Number.isFinite) || price;
+    const changePct = prevClose > 0 ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0;
 
     const { bids, asks, totalBidVol, totalAskVol } = generateOrderBook(bid, ask, bidSize, askSize);
-    const signal = computeSignal(rsi, vwap, price, totalBidVol, totalAskVol, quote.regularMarketChangePercent || 0, sma20);
+    const signal = computeSignal(rsi, vwap, price, totalBidVol, totalAskVol, changePct, sma20);
 
-    // Recent 5m candles for mini chart (last 48 = ~4 hours)
+    // Recent 5m candles for sparkline (last 48 ≈ 4 hours)
     const recentCandles = [];
-    const end = closes.length;
-    const start = Math.max(0, end - 48);
-    for (let i = start; i < end; i++) {
-      if (closes[i] != null) recentCandles.push({ t: timestamps[i] * 1000, c: closes[i], v: volumes[i] || 0 });
+    const end = iCloses.length;
+    for (let i = Math.max(0, end - 48); i < end; i++) {
+      if (iCloses[i] != null) recentCandles.push({ t: (iTS[i] || 0) * 1000, c: iCloses[i], v: iVolumes[i] || 0 });
     }
+
+    // Estimate avg volume from 3-month daily history
+    const hVolumes  = (hq.volume || []).filter(Number.isFinite);
+    const avgVolume = hVolumes.length > 0 ? Math.round(hVolumes.reduce((a, b) => a + b, 0) / hVolumes.length) : 0;
 
     res.json({
       symbol,
-      name:          quote.shortName || quote.longName || symbol,
+      name,
       price,
       bid,
       ask,
-      spread:        +(ask - bid).toFixed(4),
-      spreadPct:     +((ask - bid) / price * 100).toFixed(3),
-      change:        +(price - (quote.regularMarketPreviousClose || price)).toFixed(4),
-      changePct:     +(quote.regularMarketChangePercent || 0).toFixed(2),
-      volume:        quote.regularMarketVolume || 0,
-      avgVolume:     quote.averageVolume || 0,
-      dayLow:        quote.regularMarketDayLow || 0,
-      dayHigh:       quote.regularMarketDayHigh || 0,
-      open:          quote.regularMarketOpen || 0,
-      prevClose:     quote.regularMarketPreviousClose || 0,
-      week52Low:     quote.fiftyTwoWeekLow || 0,
-      week52High:    quote.fiftyTwoWeekHigh || 0,
-      marketCap:     quote.marketCap || 0,
+      spread:     +(ask - bid).toFixed(4),
+      spreadPct:  +((ask - bid) / price * 100).toFixed(3),
+      change:     +(price - prevClose).toFixed(4),
+      changePct,
+      volume:     meta.regularMarketVolume || 0,
+      avgVolume,
+      dayLow:     meta.regularMarketDayLow  || 0,
+      dayHigh:    meta.regularMarketDayHigh || 0,
+      open:       firstOpen,
+      prevClose,
+      week52Low:  meta.fiftyTwoWeekLow  || 0,
+      week52High: meta.fiftyTwoWeekHigh || 0,
+      marketCap:  0,  // not available from chart endpoint
       bids,
       asks,
       totalBidVol,
       totalAskVol,
-      indicators:    { rsi, vwap: +vwap.toFixed(4), sma20: +sma20.toFixed(4), sma9: +sma9.toFixed(4) },
+      indicators: { rsi, vwap: +vwap.toFixed(4), sma20: +sma20.toFixed(4), sma9: +sma9.toFixed(4) },
       signal,
-      candles:        recentCandles,
-      updatedAt:      new Date().toISOString(),
+      candles:    recentCandles,
+      updatedAt:  new Date().toISOString(),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
@@ -1104,15 +1135,20 @@ app.get('/api/market/level2/:symbol', async (req, res) => {
 app.get('/api/market/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase().trim();
   try {
-    const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=symbol,shortName,regularMarketPrice,regularMarketChangePercent`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000),
+    const result = await fetchYFChart(symbol, '1d', '5d');
+    const meta = result.meta;
+    const price = meta.regularMarketPrice || 0;
+    const prevClose = meta.chartPreviousClose || price;
+    const changePct = prevClose > 0 ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0;
+    res.json({
+      symbol: meta.symbol || symbol,
+      name: meta.longName || meta.shortName || symbol,
+      price,
+      changePct,
     });
-    const json = await r.json();
-    const q = json?.quoteResponse?.result?.[0];
-    if (!q) return res.status(404).json({ error: 'Not found' });
-    res.json({ symbol: q.symbol, name: q.shortName || q.symbol, price: q.regularMarketPrice, changePct: q.regularMarketChangePercent });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
