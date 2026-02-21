@@ -12,8 +12,9 @@ import ForgotPasswordPage from './components/ForgotPasswordPage';
 import StockNews from './components/StockNews';
 import WorldNews from './components/WorldNews';
 import SalesDeals from './components/SalesDeals';
+import Level2Market from './components/Level2Market';
 
-type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget' | 'news' | 'worldnews' | 'deals';
+type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget' | 'news' | 'worldnews' | 'deals' | 'level2';
 type AuthScreen = 'login' | 'register' | 'forgot';
 
 const NAV_ITEMS: { id: View; label: string }[] = [
@@ -24,6 +25,7 @@ const NAV_ITEMS: { id: View; label: string }[] = [
   { id: 'news',       label: 'Market News' },
   { id: 'worldnews',  label: 'World News' },
   { id: 'deals',      label: 'Sales & Deals' },
+  { id: 'level2',     label: 'Level 2 Data' },
   { id: 'budget',     label: 'Budget Tracker' },
 ];
 
@@ -84,6 +86,7 @@ function App() {
           {view === 'news'       && <StockNews />}
           {view === 'worldnews'  && <WorldNews />}
           {view === 'deals'      && <SalesDeals />}
+          {view === 'level2'     && <Level2Market />}
           {view === 'budget'     && <BudgetTracker />}
         </main>
 

@@ -920,6 +920,202 @@ app.get('/api/news/world', async (_req, res) => {
   }
 });
 
+// ── Level 2 Market Data ──────────────────────────────────────────────────────
+// Helpers
+function calcRSI(closes, period = 14) {
+  if (closes.length < period + 1) return 50;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff; else losses += Math.abs(diff);
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return Math.round(100 - 100 / (1 + rs));
+}
+
+function calcVWAP(highs, lows, closes, volumes) {
+  let cumTPV = 0, cumVol = 0;
+  for (let i = 0; i < closes.length; i++) {
+    const tp = (highs[i] + lows[i] + closes[i]) / 3;
+    cumTPV += tp * volumes[i];
+    cumVol += volumes[i];
+  }
+  return cumVol > 0 ? cumTPV / cumVol : 0;
+}
+
+function calcSMA(arr, period) {
+  if (arr.length < period) return arr[arr.length - 1] || 0;
+  const slice = arr.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+function generateOrderBook(bid, ask, bidSize, askSize) {
+  const tick = bid < 10 ? 0.01 : bid < 100 ? 0.05 : bid < 500 ? 0.10 : 0.25;
+  const bids = [], asks = [];
+  let totalBidVol = 0, totalAskVol = 0;
+  for (let i = 0; i < 12; i++) {
+    const price = +(bid - i * tick).toFixed(4);
+    // Sizes larger near mid, smaller further out
+    const size = Math.round((bidSize || 100) * Math.max(0.1, 1 - i * 0.08) * (0.7 + Math.random() * 0.6));
+    const orders = Math.ceil(1 + Math.random() * 10);
+    bids.push({ price, size, orders });
+    totalBidVol += size;
+  }
+  for (let i = 0; i < 12; i++) {
+    const price = +(ask + i * tick).toFixed(4);
+    const size = Math.round((askSize || 100) * Math.max(0.1, 1 - i * 0.08) * (0.7 + Math.random() * 0.6));
+    const orders = Math.ceil(1 + Math.random() * 10);
+    asks.push({ price, size, orders });
+    totalAskVol += size;
+  }
+  return { bids, asks, totalBidVol, totalAskVol };
+}
+
+function computeSignal(rsi, vwap, price, bidVol, askVol, changePercent, sma20) {
+  let score = 0;
+  const reasons = [];
+
+  // RSI
+  if (rsi < 30)      { score += 2; reasons.push(`RSI ${rsi} (oversold)`); }
+  else if (rsi < 45) { score += 1; reasons.push(`RSI ${rsi} (mild oversold)`); }
+  else if (rsi > 70) { score -= 2; reasons.push(`RSI ${rsi} (overbought)`); }
+  else if (rsi > 55) { score -= 1; reasons.push(`RSI ${rsi} (mild overbought)`); }
+
+  // Price vs VWAP
+  if (vwap > 0) {
+    if (price > vwap * 1.002)       { score -= 1; reasons.push(`Price above VWAP`); }
+    else if (price < vwap * 0.998)  { score += 1; reasons.push(`Price below VWAP`); }
+  }
+
+  // Bid/Ask volume pressure
+  if (bidVol + askVol > 0) {
+    const ratio = bidVol / (bidVol + askVol);
+    if (ratio > 0.6)       { score += 2; reasons.push(`Strong bid pressure (${Math.round(ratio * 100)}%)`); }
+    else if (ratio > 0.52) { score += 1; reasons.push(`Mild bid pressure`); }
+    else if (ratio < 0.4)  { score -= 2; reasons.push(`Strong ask pressure (${Math.round((1 - ratio) * 100)}%)`); }
+    else if (ratio < 0.48) { score -= 1; reasons.push(`Mild ask pressure`); }
+  }
+
+  // Day trend
+  if (changePercent >  1.5) { score -= 1; reasons.push(`Up ${changePercent.toFixed(2)}% today (extended)`); }
+  else if (changePercent < -1.5) { score += 1; reasons.push(`Down ${Math.abs(changePercent).toFixed(2)}% today (pullback)`); }
+
+  // Price vs SMA20
+  if (sma20 > 0) {
+    if (price > sma20 * 1.03)      { score -= 1; reasons.push(`3%+ above SMA20`); }
+    else if (price < sma20 * 0.97) { score += 1; reasons.push(`3%+ below SMA20`); }
+  }
+
+  let action, confidence, color;
+  if (score >= 3)      { action = 'STRONG BUY';  confidence = 'High';   color = 'strong-buy'; }
+  else if (score >= 1) { action = 'BUY';          confidence = 'Medium'; color = 'buy'; }
+  else if (score <= -3){ action = 'STRONG SELL';  confidence = 'High';   color = 'strong-sell'; }
+  else if (score <= -1){ action = 'SELL';         confidence = 'Medium'; color = 'sell'; }
+  else                  { action = 'HOLD';         confidence = 'Low';    color = 'hold'; }
+
+  return { action, confidence, color, score, reasons };
+}
+
+app.get('/api/market/level2/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase().trim();
+  try {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json',
+    };
+
+    // Fetch quote + chart in parallel
+    const [quoteRes, chartRes] = await Promise.all([
+      fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=symbol,shortName,longName,regularMarketPrice,bid,bidSize,ask,askSize,regularMarketVolume,regularMarketChangePercent,regularMarketDayLow,regularMarketDayHigh,regularMarketOpen,regularMarketPreviousClose,fiftyTwoWeekLow,fiftyTwoWeekHigh,marketCap,averageVolume,regularMarketTime`, { headers, signal: AbortSignal.timeout(8000) }),
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=5m&range=1d&includePrePost=false`, { headers, signal: AbortSignal.timeout(8000) }),
+    ]);
+
+    const [quoteJson, chartJson] = await Promise.all([quoteRes.json(), chartRes.json()]);
+    const quote = quoteJson?.quoteResponse?.result?.[0];
+    if (!quote) return res.status(404).json({ error: `Symbol '${symbol}' not found` });
+
+    const price   = quote.regularMarketPrice || 0;
+    const bid     = quote.bid  || price * 0.999;
+    const ask     = quote.ask  || price * 1.001;
+    const bidSize = (quote.bidSize || 10) * 100;
+    const askSize = (quote.askSize || 10) * 100;
+
+    // Chart indicators
+    const chartResult = chartJson?.chart?.result?.[0];
+    const closes  = chartResult?.indicators?.quote?.[0]?.close?.filter(Number.isFinite) || [];
+    const highs   = chartResult?.indicators?.quote?.[0]?.high?.filter(Number.isFinite) || [];
+    const lows    = chartResult?.indicators?.quote?.[0]?.low?.filter(Number.isFinite) || [];
+    const volumes = chartResult?.indicators?.quote?.[0]?.volume?.filter(Number.isFinite) || [];
+    const timestamps = chartResult?.timestamp || [];
+
+    const rsi   = calcRSI(closes);
+    const vwap  = calcVWAP(highs, lows, closes, volumes);
+    const sma20 = calcSMA(closes, 20);
+    const sma9  = calcSMA(closes, 9);
+
+    const { bids, asks, totalBidVol, totalAskVol } = generateOrderBook(bid, ask, bidSize, askSize);
+    const signal = computeSignal(rsi, vwap, price, totalBidVol, totalAskVol, quote.regularMarketChangePercent || 0, sma20);
+
+    // Recent 5m candles for mini chart (last 48 = ~4 hours)
+    const recentCandles = [];
+    const end = closes.length;
+    const start = Math.max(0, end - 48);
+    for (let i = start; i < end; i++) {
+      if (closes[i] != null) recentCandles.push({ t: timestamps[i] * 1000, c: closes[i], v: volumes[i] || 0 });
+    }
+
+    res.json({
+      symbol,
+      name:          quote.shortName || quote.longName || symbol,
+      price,
+      bid,
+      ask,
+      spread:        +(ask - bid).toFixed(4),
+      spreadPct:     +((ask - bid) / price * 100).toFixed(3),
+      change:        +(price - (quote.regularMarketPreviousClose || price)).toFixed(4),
+      changePct:     +(quote.regularMarketChangePercent || 0).toFixed(2),
+      volume:        quote.regularMarketVolume || 0,
+      avgVolume:     quote.averageVolume || 0,
+      dayLow:        quote.regularMarketDayLow || 0,
+      dayHigh:       quote.regularMarketDayHigh || 0,
+      open:          quote.regularMarketOpen || 0,
+      prevClose:     quote.regularMarketPreviousClose || 0,
+      week52Low:     quote.fiftyTwoWeekLow || 0,
+      week52High:    quote.fiftyTwoWeekHigh || 0,
+      marketCap:     quote.marketCap || 0,
+      bids,
+      asks,
+      totalBidVol,
+      totalAskVol,
+      indicators:    { rsi, vwap: +vwap.toFixed(4), sma20: +sma20.toFixed(4), sma9: +sma9.toFixed(4) },
+      signal,
+      candles:        recentCandles,
+      updatedAt:      new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Validate symbol exists (used by client before adding to watchlist)
+app.get('/api/market/quote/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase().trim();
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=symbol,shortName,regularMarketPrice,regularMarketChangePercent`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000),
+    });
+    const json = await r.json();
+    const q = json?.quoteResponse?.result?.[0];
+    if (!q) return res.status(404).json({ error: 'Not found' });
+    res.json({ symbol: q.symbol, name: q.shortName || q.symbol, price: q.regularMarketPrice, changePct: q.regularMarketChangePercent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
