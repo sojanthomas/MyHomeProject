@@ -11,8 +11,9 @@ import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import StockNews from './components/StockNews';
 import WorldNews from './components/WorldNews';
+import SalesDeals from './components/SalesDeals';
 
-type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget' | 'news' | 'worldnews';
+type View = 'assets' | 'accounts' | 'activities' | 'stocks' | 'budget' | 'news' | 'worldnews' | 'deals';
 type AuthScreen = 'login' | 'register' | 'forgot';
 
 const NAV_ITEMS: { id: View; label: string }[] = [
@@ -22,6 +23,7 @@ const NAV_ITEMS: { id: View; label: string }[] = [
   { id: 'stocks',     label: 'Stocks Portfolio' },
   { id: 'news',       label: 'Market News' },
   { id: 'worldnews',  label: 'World News' },
+  { id: 'deals',      label: 'Sales & Deals' },
   { id: 'budget',     label: 'Budget Tracker' },
 ];
 
@@ -81,6 +83,7 @@ function App() {
           {view === 'stocks'     && <StockManager />}
           {view === 'news'       && <StockNews />}
           {view === 'worldnews'  && <WorldNews />}
+          {view === 'deals'      && <SalesDeals />}
           {view === 'budget'     && <BudgetTracker />}
         </main>
 

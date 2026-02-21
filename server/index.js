@@ -676,6 +676,121 @@ app.get('/api/news/market', async (_req, res) => {
   }
 });
 
+// ── Sales & Deals News Route ─────────────────────────────
+const DEALS_SOURCES = [
+  { name: 'SlickDeals',     url: 'https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1' },
+  { name: 'DealNews',       url: 'https://dealnews.com/rss.xml' },
+  { name: "Brad's Deals",  url: 'https://www.bradsdeals.com/feed' },
+  { name: '9to5Toys',       url: 'https://9to5toys.com/feed/' },
+  { name: '9to5Mac Deals',  url: 'https://9to5mac.com/category/deals/feed/' },
+  { name: 'The Wirecutter', url: 'https://www.nytimes.com/wirecutter/deals/feed/' },
+  { name: 'Reddit Deals',   url: 'https://www.reddit.com/r/deals/.rss' },
+  { name: 'Reddit Frugal',  url: 'https://www.reddit.com/r/Frugal/.rss' },
+  { name: 'Kinja Deals',    url: 'https://feeds.feedburner.com/KinjaDeals' },
+  { name: 'Tom\'s Guide',   url: 'https://www.tomsguide.com/feeds/all' },
+];
+
+const DEALS_CATEGORIES = [
+  { name: 'Electronics',    icon: '💻', patterns: [/\b(laptop|phone|iphone|android|tablet|tv|television|monitor|headphone|earbuds|camera|gaming|console|playstation|xbox|nintendo|computer|pc|mac|ipad|speaker|printer|router|smartwatch|drone)\b/gi] },
+  { name: 'Clothing',       icon: '👗', patterns: [/\b(shirt|pants|jeans|dress|shoes|sneakers|boots|jacket|coat|hoodie|sweater|fashion|apparel|clothing|levi|nike|adidas|gap|h&m|zara|underwear|socks|handbag|purse)\b/gi] },
+  { name: 'Home & Kitchen', icon: '🏠', patterns: [/\b(kitchen|cookware|vacuum|blender|coffee|bedding|mattress|pillow|furniture|sofa|couch|lamp|appliance|instant pot|air fryer|oven|refrigerator|washer|dryer|dishwasher|towel|curtain|rug)\b/gi] },
+  { name: 'Food & Grocery', icon: '🍎', patterns: [/\b(food|grocery|meal|snack|restaurant|pizza|burger|coffee|drink|wine|beer|chocolate|organic|whole foods|instacart|doordash|grubhub|uber eats|delivery)\b/gi] },
+  { name: 'Beauty',         icon: '💄', patterns: [/\b(makeup|lipstick|foundation|skincare|moisturizer|serum|shampoo|conditioner|perfume|fragrance|loreal|maybelline|ulta|sephora|beauty|hair|nail|spa|grooming)\b/gi] },
+  { name: 'Sports',         icon: '🏋️', patterns: [/\b(fitness|gym|workout|treadmill|bike|yoga|running|hiking|camping|fishing|sport|exercise|weight|protein|supplement|outdoor|gear|backpack)\b/gi] },
+  { name: 'Gaming',         icon: '🎮', patterns: [/\b(game|gaming|playstation|xbox|nintendo|steam|pc game|video game|controller|headset|keyboard|mouse|monitor|fps|rpg|mmo)\b/gi] },
+  { name: 'Travel',         icon: '✈️', patterns: [/\b(flight|hotel|travel|vacation|trip|cruise|airfare|booking|expedia|kayak|airbnb|resort|tour|luggage|passport)\b/gi] },
+  { name: 'Books & Media',  icon: '📚', patterns: [/\b(book|kindle|audible|movie|music|streaming|netflix|spotify|disney|hulu|amazon prime|ebook|magazine)\b/gi] },
+  { name: 'Toys & Kids',    icon: '🧸', patterns: [/\b(toy|lego|barbie|kids|children|baby|stroller|diaper|school|backpack|game|puzzle)\b/gi] },
+];
+
+const DEAL_HOT_RE   = [/\b(\d{2,3}%\s*off|save \$\d{3,}|up to \d{2,3}%|lowest (ever|price)|all[- ]time low|price drop|clearance|blowout|flash sale|today only|limited time|door buster)\b/gi];
+const DEAL_GREAT_RE = [/\b(\d{2}%\s*off|save \$\d{2,}|deal of the day|hot deal|best deal|best price|huge discount|major discount|half off|50% off|buy one get one|bogo)\b/gi];
+const DEAL_GOOD_RE  = [/\b(on sale|discount|coupon|promo|promotional|offer|special|reduced|markdown|off\s*$|\d+%\s*off|save \$\d+)\b/gi];
+
+function scoreDeal(text) {
+  const t = text || '';
+  if (DEAL_HOT_RE.some(re   => { re.lastIndex = 0; return re.test(t); })) return { deal: 'hot',     dealLabel: 'Hot Deal' };
+  if (DEAL_GREAT_RE.some(re => { re.lastIndex = 0; return re.test(t); })) return { deal: 'great',   dealLabel: 'Great Deal' };
+  if (DEAL_GOOD_RE.some(re  => { re.lastIndex = 0; return re.test(t); })) return { deal: 'good',    dealLabel: 'Good Deal' };
+  return { deal: 'regular', dealLabel: 'On Sale' };
+}
+
+function detectDealCategory(text) {
+  const t = text || '';
+  for (const cat of DEALS_CATEGORIES) {
+    if (cat.patterns.some(re => { re.lastIndex = 0; return re.test(t); }))
+      return { category: cat.name, categoryIcon: cat.icon };
+  }
+  return { category: 'General', categoryIcon: '🛍️' };
+}
+
+function extractDiscount(text) {
+  const t = text || '';
+  const pct   = t.match(/(\d{2,3})%\s*off/i);
+  const dollar = t.match(/save \$(\d+)/i);
+  if (pct)    return pct[1] + '% OFF';
+  if (dollar) return '$' + dollar[1] + ' OFF';
+  return '';
+}
+
+async function fetchDealsRSS(source) {
+  try {
+    const res = await fetch(source.url, {
+      signal: AbortSignal.timeout(7000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HomeAssetBot/1.0)', 'Accept': 'application/rss+xml, application/xml, text/xml' },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', cdataTagName: '__cdata' });
+    const parsed = parser.parse(xml);
+    const channel = parsed?.rss?.channel || parsed?.feed;
+    if (!channel) return [];
+    const items = channel.item || channel.entry || [];
+    const arr = Array.isArray(items) ? items : [items];
+    return arr.slice(0, 25).map(item => {
+      const title   = item.title?.['#text'] || item.title?.['__cdata'] || item.title || '';
+      const desc    = item.description?.['#text'] || item.description?.['__cdata'] || item.description ||
+                      item.summary?.['#text'] || item.summary || '';
+      const link    = item.link?.['#text'] || item.link?.['@_href'] || item.link || '';
+      const pubDate = item.pubDate || item.published || item.updated || null;
+      const combined = String(title) + ' ' + String(desc);
+      const { category, categoryIcon } = detectDealCategory(combined);
+      return {
+        id:          Buffer.from((link || title) + source.name).toString('base64').slice(0, 32),
+        title:       String(title).replace(/<[^>]*>/g, '').trim(),
+        description: String(desc).replace(/<[^>]*>/g, '').trim().slice(0, 200),
+        link:        String(link).trim(),
+        pubDate:     pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+        source:      source.name,
+        category,
+        categoryIcon,
+        discount:    extractDiscount(combined),
+        ...scoreDeal(combined),
+      };
+    }).filter(i => i.title);
+  } catch {
+    return [];
+  }
+}
+
+app.get('/api/news/deals', async (_req, res) => {
+  try {
+    const results = await Promise.allSettled(DEALS_SOURCES.map(fetchDealsRSS));
+    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    const seen = new Set();
+    const unique = all.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; });
+    // Sort by deal quality then by date
+    const order = { hot: 0, great: 1, good: 2, regular: 3 };
+    unique.sort((a, b) => {
+      if (order[a.deal] !== order[b.deal]) return order[a.deal] - order[b.deal];
+      return new Date(b.pubDate) - new Date(a.pubDate);
+    });
+    res.json(unique.slice(0, 120));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── World News Route ─────────────────────────────────
 const WORLD_SOURCES = [
   { name: 'BBC News',         url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
